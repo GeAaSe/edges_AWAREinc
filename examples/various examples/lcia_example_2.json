@@ -39,6 +39,17 @@
         "location": "RER"
       },
       "value": 3.0
+    },
+    {
+      "supplier": {
+        "name": "Carbon dioxide, fossil",
+        "matrix": "biosphere"
+      },
+      "consumer": {
+        "matrix": "technosphere",
+        "location": "CA"
+      },
+      "value": 15
     }
   ]
 }

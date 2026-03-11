@@ -2518,6 +2518,7 @@ class EdgeLCIA:
         decomposed_exclusions = self.geo.batch(
             locations=list(raw_exclusion_locs), containing=True
         )
+        print(decomposed_exclusions)
         decomposed_exclusions = frozenset(
             (k, tuple(v)) for k, v in decomposed_exclusions.items()
         )
@@ -2861,7 +2862,7 @@ class EdgeLCIA:
         self._prepare_restricted_lookups_from_unprocessed()
 
         self._initialize_weights()
-
+        print("map contained locations starts")
         logger.info("Handling contained locations…")
 
         def _geo_contains(container: str, member: str) -> bool:
@@ -2978,6 +2979,10 @@ class EdgeLCIA:
                         ),
                         None,
                     )
+                    if nearest is None:
+                        print(consumer_location, "-> nearest is None")
+                    else:
+                        print(consumer_location, "-> nearest is :", nearest)
 
                     self.logger.isEnabledFor(logging.DEBUG) and self.logger.debug(
                         "contained: consumer %s -> nearest method container %s (ordered candidates=%s)",
@@ -2997,23 +3002,37 @@ class EdgeLCIA:
 
                 if not candidate_consumer_locations:
                     continue
-
+                # we now checked which alternative locations could be used for the consumer location and also set the supplier location
+                # but need to get additional info for each edge that uses this consumer-supplier location combination
                 for supplier_idx, consumer_idx in edges:
+                    
                     supplier_info = self._get_supplier_info(supplier_idx, direction)
+                    if consumer_location =="AWAREbas_31536":
+                        print("supplier_info", supplier_info)
                     if not supplier_info:
                         # Nothing useful we can use: skip this edge defensively
                         # (or log at DEBUG)
                         continue
                     consumer_info = self._get_consumer_info(consumer_idx)
+                    if consumer_location =="AWAREbas_31536":
+                        print("consumer_info", consumer_info)
 
                     sig_fields = set(self.required_supplier_fields)
+                    if consumer_location =="AWAREbas_31536":
+                        print("sig_fields", sig_fields)
                     if self._include_cls_in_supplier_sig:
                         sig_fields.add("classifications")
+
+                    if consumer_location =="AWAREbas_31536":
+                        print("sig_fields", sig_fields)
 
                     _proj = {
                         k: supplier_info[k] for k in sig_fields if k in supplier_info
                     }
                     sig = _equality_supplier_signature_cached(make_hashable(_proj))
+
+                    if consumer_location =="AWAREbas_31536":
+                        print("sig", sig)
 
                     if sig in self._cached_supplier_keys:
                         prefiltered_groups[sig].append(
@@ -3096,6 +3115,41 @@ class EdgeLCIA:
                         )
 
                         if new_cf != 0:
+                    # example for group_edges[0]: 
+                    # (1799,
+                    # 9913,
+                    # {'name': 'Water'},
+                    # {'location': 'AWAREbas_31536', 'classifications': [('ISIC rev.4 ecoinvent', '0111:Growing of cereals (except rice), leguminous crops and oil seeds'), ('CPC', '01290: Vegetables, fresh, n.e.c.')]},
+                    # ['__ANY__'],
+                    # ['FR'])
+
+                    supplier_info = group_edges[0][2]
+                    consumer_info = group_edges[0][3]
+                    candidate_supplier_locations = group_edges[0][-2]
+                    candidate_consumer_locations = group_edges[0][-1]
+
+                    new_cf, matched_cf_obj, agg_uncertainty = (
+                        self._compute_average_cf_cached(
+                            candidate_suppliers=candidate_supplier_locations,
+                            candidate_consumers=candidate_consumer_locations,
+                            supplier_info=supplier_info,
+                            consumer_info=consumer_info,
+                            required_supplier_fields=self.required_supplier_fields,
+                            required_consumer_fields=self.required_consumer_fields,
+                            cf_index=self.cf_index,
+                        )
+                    )
+                    print(sig,
+                          new_cf,supplier_info,consumer_info,candidate_supplier_locations,candidate_consumer_locations)
+                    if new_cf:
+                        for (
+                            supplier_idx,
+                            consumer_idx,
+                            supplier_info,
+                            consumer_info,
+                            _,
+                            _,
+                        ) in group_edges:
                             add_cf_entry(
                                 cfs_mapping=self.cfs_mapping,
                                 supplier_info=supplier_info,
@@ -3120,6 +3174,7 @@ class EdgeLCIA:
                 required_supplier_fields=self.required_supplier_fields,
                 required_consumer_fields=self.required_consumer_fields,
             )
+            print("grouped_edges",grouped_edges)
 
             if len(grouped_edges) > 0:
                 for (
@@ -3158,6 +3213,7 @@ class EdgeLCIA:
                             indices=edge_group,
                         )
 
+        print("map contained locations is over")
         self._update_unprocessed_edges()
         self.applied_strategies.append("map_contained_locations")
 
@@ -5464,4 +5520,5 @@ class EdgeLCIA:
         """
         if getattr(self, "_geo", None) is None:
             self._geo = GeoResolver(self.weights, self.additional_topologies)
+            
         return self._geo

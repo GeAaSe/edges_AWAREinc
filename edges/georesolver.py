@@ -85,9 +85,11 @@ class GeoResolver:
         if use_builtin_topologies:
             for namespace, topology in load_builtin_topologies().items():
                 self._add_topology_definitions(topology, namespace)
+        self.contructive_geometry_namespaces = []
 
         if additional_topologies:
-            self._add_topology_definitions(additional_topologies, "ecoinvent")
+            basin_intersections = additional_topologies["basin_topologies"]
+            self._add_topology_definitions({key:value for key,value in additional_topologies.items() if key !="basin_topologies"}, "ecoinvent")
         self._add_topology_definitions({"World": ["GLO", "RoW"]}, "ecoinvent")
 
     def _normalize_location(self, location: str) -> str | None:
@@ -159,6 +161,67 @@ class GeoResolver:
                 unique.append(key)
                 seen.add(key)
         return tuple(unique)
+        else:
+            basin_intersections = None
+
+        # allow specification of basins 
+        if any(["basin_" in x for x in self.available_locations]):
+            #print("LCIA method contains basin locations")
+            self.logger.info("LCIA method contains basin locations")
+        else:
+            self.logger.warning("LCIA method contains no basin locations")
+        if basin_intersections is None:
+            self.logger.warning("couldn't find basin information in additional_topologies")
+        else:
+            basin_topologies = self._split_faces_by_basins(self.geo, basin_intersections)
+            self.geo.add_definitions(basin_topologies, "AWARE", relative=False)
+            self.logger.info("added basin geometries to georesolver")
+            self.contructive_geometry_namespaces.append("AWARE")
+        
+    def possible_locations_from_constr_geom(self, constr_geom_method, location, exclusive):
+        """
+        Return related locations via constructive_geometries.
+
+        This is a low-level helper used by `find_locations()`.
+        It queries `self.geo.<constr_geom_method>()` and normalizes the result
+        to string location codes via `get_str()`.
+
+        Parameters
+        ----------
+        constr_geom_method : str
+            Constructive-geometries method name; expected values:
+            - ``"within"``: return things that contain `location`
+            - ``"contained"``: return things contained by `location`
+        location : str
+            Base location identifier (e.g. ISO code, ecoinvent region ID,
+            or custom namespace location).
+        exclusive : bool, optional
+            Whether to exclude the base location region itself from matches
+            (passed through to `constructive_geometries`).
+
+        Returns
+        -------
+        list[str]
+            Size-sorted raw candidate locations (stringified) returned by the
+            constructive_geometries query. 
+        """
+        raw_candidates = []
+        # apply either the constructive_geometries funtion:
+        #  within() => all locations that contain the provided location
+        #  contained() => all locations that are inside the provided location
+        for e in getattr(self.geo, constr_geom_method)(
+            location,
+            biggest_first=False, # ensures the results are sorted according to "size" (number of constructive geometry faces)
+            exclusive=exclusive,
+            include_self=False,
+        ):
+            # getattr(self.geo, constr_geom_method) is a list of constructive_geometries locations. 
+            # it will include locations that are defined as tuple, e.g. ('ecoinvent', "UN-AMERICAS") 
+            # the main "currency" of this package is the geography name as provided in the LCI database.
+            # So, for matching to brighway edges we do not need the first entry of the tuple.
+            raw_candidates.append(get_str(e))
+        return raw_candidates
+
 
     def find_locations(
         self,
@@ -170,14 +233,15 @@ class GeoResolver:
         """
         Find locations that contain (or are contained by) a given location, filtered by availability.
 
-        :param location: Base location code to resolve from.
+        :param location: Base location code to resolve from. If the location code is provided as a tuple, the second entry of the tuple is used as location instead
         :param weights_available: Iterable of allowed region codes to consider.
         :param containing: If True, return regions that contain the base location; else contained regions.
         :param exceptions: Optional tuple of region codes to exclude.
         :return: List of matching region codes, filtered and ordered as discovered.
         """
         results = []
-
+        print(f"running find_locations for {location}")
+        # in this function we have the issue that basin is not found and no other CF is applied instead
         if exceptions:
             exceptions = tuple(get_str(e) for e in exceptions)
 
@@ -206,29 +270,51 @@ class GeoResolver:
                 return sorted(set(results))
 
             method = "contained" if containing else "within"
-            raw_candidates = []
             try:
-                for resolved_location in resolved_locations:
-                    for e in getattr(self.geo, method)(
-                        resolved_location,
-                        biggest_first=False,
-                        exclusive=containing,
-                        include_self=False,
-                    ):
-                        e_str = get_str(e)
-                        raw_candidates.append(e_str)
+                raw_candidates = self.possible_locations_from_constr_geom(constr_geom_method=method,
+                            for resolved_location in resolved_locations:
+                                                resolved_                          location=location,
+                                                                                          exclusive=containing)
+                    for raw_cand in raw_candidates:
                         if (
-                            e_str in weights_available
-                            and e_str != location
-                            and (not exceptions or e_str not in exceptions)
+                            raw_cand in weights_available
+                            and raw_cand != location
+                            and (not exceptions or raw_cand not in exceptions)
                         ):
-                            results.append(e_str)
+                            results.append(raw_cand)
                             if not containing:
-                                break
+                                break # list is expected to start with GLO when within() is used in constructive_geometries. Only GLO is taken as return value.
+
             except KeyError:
-                self.logger.info("Region %s: no geometry found.", location)
+                if len(self.contructive_geometry_namespaces):
+                    # if self.geo has other namespaces added except 'ecoinvent' and their content is not found in country_converter
+                    self.logger.info("Region %s: no geometry found, trying additional self.geo namespaces (fails are silent).", location)
+                    for n in self.contructive_geometry_namespaces:
+                        try:
+                            raw_candidates = self.possible_locations_from_constr_geom(constr_geom_method=method,
+                                                                          location=(n, location),
+                                                                          exclusive=containing)
+                            for raw_cand in raw_candidates:
+                                print(raw_cand)
+                                if (
+                                    raw_cand in weights_available
+                                    and raw_cand != location
+                                    and (not exceptions or raw_cand not in exceptions)
+                                ):
+                                    results.append(raw_cand)
+                                    print(results)
+                                    if not containing:
+                                        break # results list is expected to start with smallest geometry that contains the location.
+                        except KeyError:
+                            print(f"namespace {n} did not work out for {location}")
+                            pass
+                else:
+                    self.logger.info("Region %s: no geometry found.", location)
+
+
 
         # Deduplicate and enforce deterministic ordering
+        print("finished find_locations")
         return sorted(set(results))
 
     @lru_cache(maxsize=2048)
@@ -289,3 +375,62 @@ class GeoResolver:
             )
             for loc in locations
         }
+    
+    def _split_faces_by_basins(self,
+        geomatcher: Geomatcher,
+        basin_intersection: dict,
+        allowed_misses: list[int] = None
+        ) -> dict[str, set[int]]:
+        """
+        Split faces at basin boundaries and create basin topology definitions.
+        
+        Parameters:
+        -----------
+        geomatcher : Geomatcher
+            The geomatcher object
+        basin_intersection : dict
+            maps face_id to basin_id(s)
+        allowed_misses : list[int], optional
+            Face IDs that do not need to be split, e.g. because they are not included in geomatcher even though existing in faces GeoPackage
+            
+        Returns:
+        --------
+        dict[str, set[int]]
+            Basin topologies mapping basin IDs to face sets
+        """
+        from collections import defaultdict
+
+        if allowed_misses is None:
+            allowed_misses = [6893, 8281]  # Argentina-Chile conflict, Caspian Sea
+        
+        basin_topologies = defaultdict(set)
+        max_face_int = max(x for x in geomatcher.faces if isinstance(x, int))
+        lower_id_boundary = max_face_int + 1
+        new_ids = [0]
+        for face_id,basins in basin_intersection.items():
+            face_id = int(face_id)
+            if len(basins)==1:
+                # face is contained in basin, does not need to be split
+                basin_topologies[f"AWAREbas_{basins[0]}"].add(face_id)
+                
+            elif len(basins)>1:
+                # face intersects at least two basins
+                if face_id in allowed_misses:
+                    logger.info(f"Skipping allowed missing basin: {face_id}")
+                    continue
+                # prescribing the new face_ids is significantly faster than just providing the number of new faces to geomatcher
+                # geomatcher will willingly overwrite?? existing faces, so the ids need to be selected carefully.
+                assert(max(new_ids)<lower_id_boundary)
+                upper_id_boundary = lower_id_boundary + len(basins)
+                new_ids = list(range(lower_id_boundary, upper_id_boundary))
+                lower_id_boundary = upper_id_boundary
+                
+                geomatcher.split_face(face_id, ids=new_ids)
+                logger.debug(f"Split face {face_id} into {len(new_ids)} parts")
+                
+                for i, basin in enumerate(basins):
+                    basin_topologies[f"AWAREbas_{basin}"].add(new_ids[i])
+            else:
+                raise ValueError(f"No basin found for face_id {face_id}")
+        
+        return dict(basin_topologies)

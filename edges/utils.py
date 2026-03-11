@@ -842,3 +842,8 @@ def _short_cf(cf: dict, maxlen=160):
         return (s[: maxlen - 1] + "…") if len(s) > maxlen else s
     except Exception:
         return str(cf)[:maxlen]
+    
+def load_basin_data():
+    with open(DATA_DIR / "AWARE_basins_constr_geom.json", "r") as f:
+        basin_intersections = json.load(f)
+    return basin_intersections

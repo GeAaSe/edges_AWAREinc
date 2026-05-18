@@ -90,7 +90,23 @@ class GeoResolver:
         if additional_topologies:
             basin_intersections = additional_topologies["basin_topologies"]
             self._add_topology_definitions({key:value for key,value in additional_topologies.items() if key !="basin_topologies"}, "ecoinvent")
+        else:
+            basin_intersections = None
         self._add_topology_definitions({"World": ["GLO", "RoW"]}, "ecoinvent")
+
+        # allow specification of basins 
+        if any(["basin_" in x for x in self.available_locations]):
+            #print("LCIA method contains basin locations")
+            self.logger.info("LCIA method contains basin locations")
+        else:
+            self.logger.warning("LCIA method contains no basin locations")
+        if basin_intersections is None:
+            self.logger.warning("couldn't find basin information in additional_topologies")
+        else:
+            basin_topologies = self._split_faces_by_basins(self.geo, basin_intersections)
+            self.geo.add_definitions(basin_topologies, "AWARE", relative=False)
+            self.logger.info("added basin geometries to georesolver")
+            self.contructive_geometry_namespaces.append("AWARE")
 
     def _normalize_location(self, location: str) -> str | None:
         """Normalize noisy legacy labels before consulting Geomatcher."""
@@ -161,22 +177,6 @@ class GeoResolver:
                 unique.append(key)
                 seen.add(key)
         return tuple(unique)
-        else:
-            basin_intersections = None
-
-        # allow specification of basins 
-        if any(["basin_" in x for x in self.available_locations]):
-            #print("LCIA method contains basin locations")
-            self.logger.info("LCIA method contains basin locations")
-        else:
-            self.logger.warning("LCIA method contains no basin locations")
-        if basin_intersections is None:
-            self.logger.warning("couldn't find basin information in additional_topologies")
-        else:
-            basin_topologies = self._split_faces_by_basins(self.geo, basin_intersections)
-            self.geo.add_definitions(basin_topologies, "AWARE", relative=False)
-            self.logger.info("added basin geometries to georesolver")
-            self.contructive_geometry_namespaces.append("AWARE")
         
     def possible_locations_from_constr_geom(self, constr_geom_method, location, exclusive):
         """
@@ -264,17 +264,21 @@ class GeoResolver:
                     if not exceptions or e_str not in exceptions:
                         results.append(e_str)
         else:
+            #check if location exists as such
             resolved_locations = self._resolve_geomatcher_keys(location)
             if not resolved_locations:
                 self.logger.info("Region %s: no geometry found.", location)
                 return sorted(set(results))
 
+            #return linked locations
             method = "contained" if containing else "within"
             try:
-                raw_candidates = self.possible_locations_from_constr_geom(constr_geom_method=method,
-                            for resolved_location in resolved_locations:
-                                                resolved_                          location=location,
-                                                                                          exclusive=containing)
+                for resolved_location in resolved_locations:
+                    raw_candidates = self.possible_locations_from_constr_geom(
+                        constr_geom_method=method,
+                        location=resolved_location,
+                        exclusive=containing
+                        )
                     for raw_cand in raw_candidates:
                         if (
                             raw_cand in weights_available

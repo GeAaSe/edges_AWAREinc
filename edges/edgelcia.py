@@ -3115,41 +3115,13 @@ class EdgeLCIA:
                         )
 
                         if new_cf != 0:
-                    # example for group_edges[0]: 
-                    # (1799,
-                    # 9913,
-                    # {'name': 'Water'},
-                    # {'location': 'AWAREbas_31536', 'classifications': [('ISIC rev.4 ecoinvent', '0111:Growing of cereals (except rice), leguminous crops and oil seeds'), ('CPC', '01290: Vegetables, fresh, n.e.c.')]},
-                    # ['__ANY__'],
-                    # ['FR'])
-
-                    supplier_info = group_edges[0][2]
-                    consumer_info = group_edges[0][3]
-                    candidate_supplier_locations = group_edges[0][-2]
-                    candidate_consumer_locations = group_edges[0][-1]
-
-                    new_cf, matched_cf_obj, agg_uncertainty = (
-                        self._compute_average_cf_cached(
-                            candidate_suppliers=candidate_supplier_locations,
-                            candidate_consumers=candidate_consumer_locations,
-                            supplier_info=supplier_info,
-                            consumer_info=consumer_info,
-                            required_supplier_fields=self.required_supplier_fields,
-                            required_consumer_fields=self.required_consumer_fields,
-                            cf_index=self.cf_index,
-                        )
-                    )
-                    print(sig,
-                          new_cf,supplier_info,consumer_info,candidate_supplier_locations,candidate_consumer_locations)
-                    if new_cf:
-                        for (
-                            supplier_idx,
-                            consumer_idx,
-                            supplier_info,
-                            consumer_info,
-                            _,
-                            _,
-                        ) in group_edges:
+                            # example for group_edges[0]: 
+                            # (1799,
+                            # 9913,
+                            # {'name': 'Water'},
+                            # {'location': 'AWAREbas_31536', 'classifications': [('ISIC rev.4 ecoinvent', '0111:Growing of cereals (except rice), leguminous crops and oil seeds'), ('CPC', '01290: Vegetables, fresh, n.e.c.')]},
+                            # ['__ANY__'],
+                            # ['FR'])
                             add_cf_entry(
                                 cfs_mapping=self.cfs_mapping,
                                 supplier_info=supplier_info,

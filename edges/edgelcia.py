@@ -38,6 +38,7 @@ from .utils import (
     interpolate_indexed_value,
     supports_linear_nearest_year_interpolation,
     safe_eval_cached,
+    safe_eval,
     validate_parameter_lengths,
     make_hashable,
     assert_no_nans_in_cf_list,
@@ -3824,6 +3825,10 @@ class EdgeLCIA:
 
             self._last_eval_scenario_name = scenario_name
             self._last_eval_scenario_idx = scenario_idx
+            if self.method["inventory_feedback"]["incremental"]:
+                latest_cf = {}
+                inventory_based_entries = []
+                resolved_params.update({"settings":self.method["inventory_feedback"]})
 
             for cf in self.cfs_mapping:
                 matrix_key = self._matrix_type_for_direction(cf.get("direction"))
@@ -3831,6 +3836,15 @@ class EdgeLCIA:
                     self.characterization_matrices[matrix_key] = initialize_lcia_matrix(
                         self.lca, matrix_type=matrix_key
                     )
+                # add inventory value to resolved_params if the dynamic CF function uses inventory amount
+                if isinstance(cf["value"],str):
+                    if cf["value"].split("(")[0] in self.SAFE_GLOBALS.keys() and "inventory" in cf["value"]:
+                        resolved_params.update({"inventory" : sum([self.lca.inventory[x] for x in cf["positions"]])})
+                        cf_is_inventory_based = True
+                        no_CF_caching = True
+                else:
+                    no_CF_caching = False
+                    cf_is_inventory_based = False
 
                 evaluated_split = self._evaluate_reporting_split(
                     cf.get("reporting_split"),
@@ -3843,6 +3857,7 @@ class EdgeLCIA:
                         self._raw_cf_value_for_evaluation(cf),
                         resolved_params=resolved_params,
                         scenario_idx=scenario_idx,
+                        stateful=no_CF_caching
                     )
                 else:
                     value = split_value
@@ -3857,9 +3872,23 @@ class EdgeLCIA:
                 if evaluated_split is not None:
                     entry["reporting_split"] = evaluated_split
 
+                if cf_is_inventory_based and self.method["inventory_feedback"]["incremental"]:
+                    latest_cf[cf["value"]] = value
+                    inventory_based_entries.append((cf["value"],entry))
+                else:
+                    self.scenario_cfs.append(entry)
+                    self.scenario_cfs_by_matrix[matrix_key].append(entry)
+
+                    for i, j in entry["positions"]:
+                        self.characterization_matrices[matrix_key][i, j] = value
+                        
+            for rich_entry in inventory_based_entries:
+                # insert latest incremental CF
+                value = latest_cf[rich_entry[0]]
+                entry = rich_entry[1]
+                entry.update({"value":value})
                 self.scenario_cfs.append(entry)
                 self.scenario_cfs_by_matrix[matrix_key].append(entry)
-
                 for i, j in entry["positions"]:
                     self.characterization_matrices[matrix_key][i, j] = value
 
@@ -3869,7 +3898,7 @@ class EdgeLCIA:
 
             self._sync_characterization_aliases()
 
-    def _evaluate_cf_numeric_value(self, raw_value, *, resolved_params, scenario_idx):
+    def _evaluate_cf_numeric_value(self, raw_value, *, resolved_params, scenario_idx, stateful = False):
         """Return a numeric CF value for a literal or parameter expression.
 
         Common method rows use a bare parameter name such as ``cf_irri_fr`` or a
@@ -3891,14 +3920,24 @@ class EdgeLCIA:
                 value = float(resolved_params[expr[1:]])
                 return -value if expr[0] == "-" else value
             try:
-                return float(
-                    safe_eval_cached(
-                        expr,
-                        parameters=resolved_params,
-                        scenario_idx=scenario_idx,
-                        SAFE_GLOBALS=self.SAFE_GLOBALS,
+                if not stateful:
+                    return float(
+                        safe_eval_cached(
+                            expr,
+                            parameters=resolved_params,
+                            scenario_idx=scenario_idx,
+                            SAFE_GLOBALS=self.SAFE_GLOBALS,
+                        )
                     )
-                )
+                else:
+                    return float(
+                        safe_eval(
+                            expr,
+                            parameters=resolved_params,
+                            scenario_idx=scenario_idx,
+                            SAFE_GLOBALS=self.SAFE_GLOBALS,
+                        )
+                    )
             except Exception as e:
                 param_names = ", ".join(sorted(map(str, resolved_params))[:10])
                 if len(resolved_params) > 10:

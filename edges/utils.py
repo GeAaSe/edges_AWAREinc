@@ -846,4 +846,32 @@ def _short_cf(cf: dict, maxlen=160):
 def load_basin_data():
     with open(DATA_DIR / "AWARE_basins_constr_geom.json", "r") as f:
         basin_intersections = json.load(f)
-    return basin_intersections
+    with open(DATA_DIR / "AWARE_working_point.json", "r") as f:
+        BASIN_MEMORY = json.load(f)
+    return basin_intersections, BasinMemory(BASIN_MEMORY)
+
+class BasinMemory:
+    def __init__(self, initial):
+        self._data = {int(k): list(v) for k, v in initial.items()}
+        self.incr_cfs = {int(k): [] for k in initial.keys()}
+
+    def add(self, basin_id, hwc):
+        if basin_id not in self._data:
+            raise KeyError(f"No basin memory for basin {basin_id}")
+        self._data[basin_id].append(self._data[basin_id][-1] + hwc)
+
+    def current(self, basin_id):
+        return self._data[basin_id][-1]
+
+    def default(self, basin_id):
+        return self._data[basin_id][0]
+
+    def total_lci(self, basin_id):
+        return self.current(basin_id) - self.default(basin_id)
+    
+    def get_increments(self, basin_id):
+        return self._data[basin_id]
+    
+    def save_cf(self, basin_id, cf):
+        self.incr_cfs[basin_id].append(cf)
+

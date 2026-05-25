@@ -2191,7 +2191,7 @@ class EdgeLCIA:
         self._prepare_restricted_lookups_from_unprocessed()
 
         self._initialize_weights()
-        weight_keys = frozenset(k for k, v in self.weights.items())
+        weight_keys = frozenset(k for k, v in self.weights.items() if v!=0)
 
         logger.info("Handling static regions…")
 
@@ -2502,7 +2502,7 @@ class EdgeLCIA:
         self._prepare_restricted_lookups_from_unprocessed()
 
         self._initialize_weights()
-        weight_keys = frozenset(k for k, v in self.weights.items())
+        weight_keys = frozenset(k for k, v in self.weights.items() if v != 0)
 
         logger.info("Handling dynamic regions…")
 
@@ -2510,13 +2510,13 @@ class EdgeLCIA:
             key = (flow["name"], flow["reference product"])
             self.technosphere_flows_lookup[key].append(flow["location"])
 
-        raw_exclusion_locs = {
+        raw_exclusion_locs = { # gets all locations for which flows exist, except RoW or ROE
             loc
             for locs in self.technosphere_flows_lookup.values()
             for loc in locs
             if str(loc).upper() not in {"ROW", "ROE"}
         }
-        decomposed_exclusions = self.geo.batch(
+        decomposed_exclusions = self.geo.batch( # gets all locations that are inside the locations to exclude
             locations=list(raw_exclusion_locs), containing=True
         )
         print(decomposed_exclusions)
@@ -3008,32 +3008,20 @@ class EdgeLCIA:
                 for supplier_idx, consumer_idx in edges:
                     
                     supplier_info = self._get_supplier_info(supplier_idx, direction)
-                    if consumer_location =="AWAREbas_31536":
-                        print("supplier_info", supplier_info)
                     if not supplier_info:
                         # Nothing useful we can use: skip this edge defensively
                         # (or log at DEBUG)
                         continue
                     consumer_info = self._get_consumer_info(consumer_idx)
-                    if consumer_location =="AWAREbas_31536":
-                        print("consumer_info", consumer_info)
-
                     sig_fields = set(self.required_supplier_fields)
-                    if consumer_location =="AWAREbas_31536":
-                        print("sig_fields", sig_fields)
                     if self._include_cls_in_supplier_sig:
                         sig_fields.add("classifications")
 
-                    if consumer_location =="AWAREbas_31536":
-                        print("sig_fields", sig_fields)
 
                     _proj = {
                         k: supplier_info[k] for k in sig_fields if k in supplier_info
                     }
                     sig = _equality_supplier_signature_cached(make_hashable(_proj))
-
-                    if consumer_location =="AWAREbas_31536":
-                        print("sig", sig)
 
                     if sig in self._cached_supplier_keys:
                         prefiltered_groups[sig].append(
@@ -3224,7 +3212,7 @@ class EdgeLCIA:
         self._prepare_restricted_lookups_from_unprocessed()
 
         self._initialize_weights()
-        weight_keys = frozenset(k for k, v in self.weights.items())
+        weight_keys = frozenset(k for k, v in self.weights.items() if v !=0)
 
         logger.info("Handling remaining exchanges…")
 
@@ -3825,11 +3813,34 @@ class EdgeLCIA:
 
             self._last_eval_scenario_name = scenario_name
             self._last_eval_scenario_idx = scenario_idx
-            if self.method["inventory_feedback"]["incremental"]:
-                latest_cf = {}
-                inventory_based_entries = []
-                resolved_params.update({"settings":self.method["inventory_feedback"]})
 
+            if self.method_metadata.get("inventory_feedback"):
+                resolved_params.update({"settings":self.method_metadata["inventory_feedback"]})
+            attributes = ["ConsumerSeason"]
+            inventory_based_entries = []
+            
+            def get_additional_activity_attributes(resolved_params, cf_value, cf_positions,*,attributes=attributes):
+                att_in_cf_value = [x for x in attributes if x in cf_value]
+                if att_in_cf_value:
+                    assert len(cf_positions)==1
+                    activity = bw2data.get_activity(self.reversed_activity[cf_positions[0][1]])
+                for attr in att_in_cf_value:
+                    resolved_params.update({attr : activity.get(attr)})
+                return resolved_params
+
+            def get_inventorybased_parameters(resolved_params, cf_value, cf_positions):
+                if not isinstance(cf_value,str):
+                    return resolved_params, False, False
+                
+                is_safe_function =  cf_value.partition("(")[0] in self.SAFE_GLOBALS.keys()
+                if  is_safe_function and "EdgeAmount" in cf_value:
+                    resolved_params.update({"EdgeAmount" : sum([self.lca.inventory[x] for x in cf_positions])})
+                    resolved_params = get_additional_activity_attributes(resolved_params, cf_value, cf_positions)
+                    return resolved_params, True, True
+                else:
+                    return resolved_params, False, False
+
+            self.length_of_positions = []
             for cf in self.cfs_mapping:
                 matrix_key = self._matrix_type_for_direction(cf.get("direction"))
                 if self.characterization_matrices[matrix_key] is None:
@@ -3837,14 +3848,7 @@ class EdgeLCIA:
                         self.lca, matrix_type=matrix_key
                     )
                 # add inventory value to resolved_params if the dynamic CF function uses inventory amount
-                if isinstance(cf["value"],str):
-                    if cf["value"].split("(")[0] in self.SAFE_GLOBALS.keys() and "inventory" in cf["value"]:
-                        resolved_params.update({"inventory" : sum([self.lca.inventory[x] for x in cf["positions"]])})
-                        cf_is_inventory_based = True
-                        no_CF_caching = True
-                else:
-                    no_CF_caching = False
-                    cf_is_inventory_based = False
+                resolved_params, no_CF_caching, cf_is_inventory_based = get_inventorybased_parameters(resolved_params, cf["value"], cf["positions"])
 
                 evaluated_split = self._evaluate_reporting_split(
                     cf.get("reporting_split"),
@@ -3861,7 +3865,7 @@ class EdgeLCIA:
                     )
                 else:
                     value = split_value
-
+                self.length_of_positions.append(len(cf["positions"]))
                 entry = {
                     "supplier": cf["supplier"],
                     "consumer": cf["consumer"],
@@ -3872,9 +3876,10 @@ class EdgeLCIA:
                 if evaluated_split is not None:
                     entry["reporting_split"] = evaluated_split
 
-                if cf_is_inventory_based and self.method["inventory_feedback"]["incremental"]:
-                    latest_cf[cf["value"]] = value
-                    inventory_based_entries.append((cf["value"],entry))
+                if cf_is_inventory_based and self.method_metadata.get("inventory_feedback"):
+                    if self.method_metadata["inventory_feedback"]["incremental"]:
+                        rich_cf_key = (cf["value"],{a:resolved_params[a] for a in attributes})
+                        inventory_based_entries.append((rich_cf_key, entry))
                 else:
                     self.scenario_cfs.append(entry)
                     self.scenario_cfs_by_matrix[matrix_key].append(entry)
@@ -3883,8 +3888,17 @@ class EdgeLCIA:
                         self.characterization_matrices[matrix_key][i, j] = value
                         
             for rich_entry in inventory_based_entries:
-                # insert latest incremental CF
-                value = latest_cf[rich_entry[0]]
+                # second round of CF calculation for incremental cases
+                # since incremental methods are assumed to always recalculate between default and current working point,
+                # an inventory of 0 simply refreshes the calculation without moving again on the impact curve
+                resolved_params.update(rich_entry[0][1])
+                resolved_params.update({"EdgeAmount":0})
+                value = self._evaluate_cf_numeric_value(
+                    rich_entry[0][0],
+                    resolved_params=resolved_params,
+                    scenario_idx=scenario_idx,
+                    stateful=no_CF_caching
+                )
                 entry = rich_entry[1]
                 entry.update({"value":value})
                 self.scenario_cfs.append(entry)

@@ -88,25 +88,20 @@ class GeoResolver:
         self.contructive_geometry_namespaces = []
 
         if additional_topologies:
-            basin_intersections = additional_topologies["basin_topologies"]
-            self._add_topology_definitions({key:value for key,value in additional_topologies.items() if key !="basin_topologies"}, "ecoinvent")
+            fine_topology = additional_topologies["fine_topology"]
+            self._add_topology_definitions({key:value for key,value in additional_topologies.items() if key !="fine_topology"}, "ecoinvent")
         else:
-            basin_intersections = None
+            fine_topology = None
         self._add_topology_definitions({"World": ["GLO", "RoW"]}, "ecoinvent")
 
-        # allow specification of basins 
-        if any(["basin_" in x for x in self.available_locations]):
-            #print("LCIA method contains basin locations")
-            self.logger.info("LCIA method contains basin locations")
+        # allow specification of face subdivsions
+        if fine_topology is None:
+            self.logger.warning("couldn't find refinement information in additional_topologies")
         else:
-            self.logger.warning("LCIA method contains no basin locations")
-        if basin_intersections is None:
-            self.logger.warning("couldn't find basin information in additional_topologies")
-        else:
-            basin_topologies = self._split_faces_by_basins(self.geo, basin_intersections)
-            self.geo.add_definitions(basin_topologies, "AWARE", relative=False)
-            self.logger.info("added basin geometries to georesolver")
-            self.contructive_geometry_namespaces.append("AWARE")
+            refined_faces = self._split_faces(self.geo, fine_topology["faces_mapping"])
+            self.geo.add_definitions(refined_faces, fine_topology["name"], relative=False)
+            self.logger.info(f"added refined {fine_topology['name']} geometries to georesolver")
+            self.contructive_geometry_namespaces.append(fine_topology["name"])
 
     def _normalize_location(self, location: str) -> str | None:
         """Normalize noisy legacy labels before consulting Geomatcher."""
@@ -240,7 +235,7 @@ class GeoResolver:
         :return: List of matching region codes, filtered and ordered as discovered.
         """
         results = []
-        print(f"running find_locations for {location}")
+        self.logger.debug(f"running find_locations for {location}")
         # in this function we have the issue that basin is not found and no other CF is applied instead
         if exceptions:
             exceptions = tuple(get_str(e) for e in exceptions)
@@ -318,7 +313,6 @@ class GeoResolver:
 
 
         # Deduplicate and enforce deterministic ordering
-        print("finished find_locations")
         return sorted(set(results))
 
     @lru_cache(maxsize=2048)
@@ -380,7 +374,7 @@ class GeoResolver:
             for loc in locations
         }
     
-    def _split_faces_by_basins(self,
+    def _split_faces(self,
         geomatcher: Geomatcher,
         basin_intersection: dict,
         allowed_misses: list[int] = None
@@ -393,7 +387,7 @@ class GeoResolver:
         geomatcher : Geomatcher
             The geomatcher object
         basin_intersection : dict
-            maps face_id to basin_id(s)
+            maps face_id to finer resolution ids, e.g. basins
         allowed_misses : list[int], optional
             Face IDs that do not need to be split, e.g. because they are not included in geomatcher even though existing in faces GeoPackage
             
@@ -405,7 +399,7 @@ class GeoResolver:
         from collections import defaultdict
 
         if allowed_misses is None:
-            allowed_misses = [6893, 8281]  # Argentina-Chile conflict, Caspian Sea
+            allowed_misses = [6893, 8281]  # face ids not available due to Argentina-Chile conflict, Caspian Sea
         
         basin_topologies = defaultdict(set)
         max_face_int = max(x for x in geomatcher.faces if isinstance(x, int))
@@ -415,7 +409,7 @@ class GeoResolver:
             face_id = int(face_id)
             if len(basins)==1:
                 # face is contained in basin, does not need to be split
-                basin_topologies[f"AWAREbas_{basins[0]}"].add(face_id)
+                basin_topologies[basins[0]].add(face_id)
                 
             elif len(basins)>1:
                 # face intersects at least two basins
@@ -433,7 +427,7 @@ class GeoResolver:
                 logger.debug(f"Split face {face_id} into {len(new_ids)} parts")
                 
                 for i, basin in enumerate(basins):
-                    basin_topologies[f"AWAREbas_{basin}"].add(new_ids[i])
+                    basin_topologies[basin].add(new_ids[i])
             else:
                 raise ValueError(f"No basin found for face_id {face_id}")
         

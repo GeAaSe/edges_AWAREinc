@@ -3048,15 +3048,18 @@ class EdgeLCIA:
 
             # Pass 1: compute per unique (cand_sup, cand_con, consumer_sig) within each supplier group
             if len(prefiltered_groups) > 0:
+                _need_cls = any(
+                    "classifications" in (cf.get("consumer") or {})
+                    for cf in self.raw_cfs_data
+                )
+                _fields_base = set(self.required_consumer_fields)
+
                 for sig, group_edges in prefiltered_groups.items():
                     memo = {}
 
                     def _consumer_sig(consumer_info: dict) -> tuple:
-                        fields = set(self.required_consumer_fields)
-                        if any(
-                            "classifications" in cf["consumer"]
-                            for cf in self.raw_cfs_data
-                        ):
+                        fields = set(_fields_base)
+                        if _need_cls:
                             fields.add("classifications")
                         proj = {
                             k: consumer_info[k] for k in fields if k in consumer_info

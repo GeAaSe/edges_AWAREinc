@@ -2345,19 +2345,19 @@ class EdgeLCIA:
 
             # Pass 1 (corrected): compute per unique (cand_sup, cand_con, consumer_sig) within each supplier group
             if len(prefiltered_groups) > 0:
+                # compute once: whether any CF consumer side refers to 'classifications'
+                _need_cls = any(
+                    "classifications" in (cf.get("consumer") or {})
+                    for cf in self.raw_cfs_data
+                )
+                _fields_base = set(self.required_consumer_fields)
+
                 for sig, group_edges in prefiltered_groups.items():
                     memo = {}
 
                     def _consumer_sig(consumer_info: dict) -> tuple:
-                        fields = set(self.required_consumer_fields)
-                        if any(
-                            "classifications" in cf["consumer"]
-                            for cf in self.raw_cfs_data
-                        ):
-                            fields.add("classifications")
-                        proj = {
-                            k: consumer_info[k] for k in fields if k in consumer_info
-                        }
+                        fields = _fields_base if not _need_cls else (_fields_base | {"classifications"})
+                        proj = {k: consumer_info[k] for k in fields if k in consumer_info}
                         return make_hashable(proj)
 
                     for (
@@ -2693,21 +2693,21 @@ class EdgeLCIA:
 
             # Pass 1 (corrected): compute per unique (cand_sup, cand_con, consumer_sig)
             if len(prefiltered_groups) > 0:
+                # compute once: whether any CF consumer side refers to 'classifications'
+                _need_cls = any(
+                    "classifications" in (cf.get("consumer") or {})
+                    for cf in self.raw_cfs_data
+                )
+                _fields_base = set(self.required_consumer_fields)
+
                 for sig, group_edges in prefiltered_groups.items():
                     # Build a small memo to avoid recomputing identical combos in this group
                     memo = {}
 
                     def _consumer_sig(consumer_info: dict) -> tuple:
                         """Hashable, filtered consumer signature (only required fields + classifications if used)."""
-                        fields = set(self.required_consumer_fields)
-                        if any(
-                            "classifications" in cf["consumer"]
-                            for cf in self.raw_cfs_data
-                        ):
-                            fields.add("classifications")
-                        proj = {
-                            k: consumer_info[k] for k in fields if k in consumer_info
-                        }
+                        fields = _fields_base if not _need_cls else (_fields_base | {"classifications"})
+                        proj = {k: consumer_info[k] for k in fields if k in consumer_info}
                         return make_hashable(proj)
 
                     for (

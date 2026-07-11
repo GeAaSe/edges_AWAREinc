@@ -3832,8 +3832,8 @@ class EdgeLCIA:
             def get_inventorybased_parameters(resolved_params, cf_value, cf_positions):
                 if not isinstance(cf_value,str):
                     return resolved_params, False, False
-                
-                is_safe_function =  cf_value.partition("(")[0] in self.SAFE_GLOBALS.keys()
+                potential_function = cf_value.lstrip("-").partition("(")[0]
+                is_safe_function =  potential_function in self.SAFE_GLOBALS.keys()
                 if  is_safe_function and "EdgeAmount" in cf_value:
                     resolved_params.update({"EdgeAmount" : sum([self.lca.inventory[x] for x in cf_positions])})
                     resolved_params = get_additional_activity_attributes(resolved_params, cf_value, cf_positions)
@@ -3898,7 +3898,7 @@ class EdgeLCIA:
                     rich_entry[0][0],
                     resolved_params=resolved_params,
                     scenario_idx=scenario_idx,
-                    stateful=no_CF_caching
+                    stateful=True
                 )
                 entry = rich_entry[1]
                 entry.update({"value":value})

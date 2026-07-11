@@ -97,11 +97,16 @@ class GeoResolver:
         # allow specification of face subdivsions
         if fine_topology is None:
             self.logger.warning("couldn't find refinement information in additional_topologies")
+            self.allowed_for_aggregations = tuple([x for x in self.geo.keys()])
         else:
             refined_faces = self._split_faces(self.geo, fine_topology["faces_mapping"])
             self.geo.add_definitions(refined_faces, fine_topology["name"], relative=False)
             self.logger.info(f"added refined {fine_topology['name']} geometries to georesolver")
             self.contructive_geometry_namespaces.append(fine_topology["name"])
+            if fine_topology["hidden"]:
+                self.allowed_for_aggregations = tuple([x for x in self.geo.keys() if x[0] != fine_topology['name']])
+            else:
+                self.allowed_for_aggregations = tuple([x for x in self.geo.keys()])
 
     def _normalize_location(self, location: str) -> str | None:
         """Normalize noisy legacy labels before consulting Geomatcher."""
@@ -173,7 +178,8 @@ class GeoResolver:
                 seen.add(key)
         return tuple(unique)
         
-    def possible_locations_from_constr_geom(self, constr_geom_method, location, exclusive):
+    def possible_locations_from_constr_geom(self, constr_geom_method, location, exclusive,
+                                            available_for_aggregations = None):
         """
         Return related locations via constructive_geometries.
 
@@ -209,6 +215,7 @@ class GeoResolver:
             biggest_first=False, # ensures the results are sorted according to "size" (number of constructive geometry faces)
             exclusive=exclusive,
             include_self=False,
+            only = available_for_aggregations
         ):
             # getattr(self.geo, constr_geom_method) is a list of constructive_geometries locations. 
             # it will include locations that are defined as tuple, e.g. ('ecoinvent', "UN-AMERICAS") 
@@ -272,7 +279,8 @@ class GeoResolver:
                     raw_candidates = self.possible_locations_from_constr_geom(
                         constr_geom_method=method,
                         location=resolved_location,
-                        exclusive=containing
+                        exclusive=containing,
+                        available_for_aggregations = self.allowed_for_aggregations
                         )
                     for raw_cand in raw_candidates:
                         if (

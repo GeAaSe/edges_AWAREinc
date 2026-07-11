@@ -971,6 +971,7 @@ def compute_average_cf(
             stats["valid_pairs_cache_hits"] = (
                 int(stats.get("valid_pairs_cache_hits", 0)) + 1
             )
+        idx_keys = cf_index.keys() # added to not make debug message below crash
         valid_location_pairs = list(cached_pairs)
     else:
         idx_keys = cf_index.keys()

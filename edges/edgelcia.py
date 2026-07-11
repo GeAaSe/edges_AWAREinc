@@ -3878,6 +3878,7 @@ class EdgeLCIA:
                     entry["reporting_split"] = evaluated_split
 
                 if cf_is_inventory_based and self.method_metadata.get("inventory_feedback"):
+                    # need a second, final evaluation of the CFs before adding to the characterization matrix 
                     if self.method_metadata["inventory_feedback"]["incremental"]:
                         rich_cf_key = (cf["value"],{a:resolved_params[a] for a in attributes})
                         inventory_based_entries.append((rich_cf_key, entry))

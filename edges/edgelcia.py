@@ -2863,7 +2863,6 @@ class EdgeLCIA:
         self._prepare_restricted_lookups_from_unprocessed()
 
         self._initialize_weights()
-        print("map contained locations starts")
         logger.info("Handling contained locations…")
 
         def _geo_contains(container: str, member: str) -> bool:
@@ -2981,9 +2980,9 @@ class EdgeLCIA:
                         None,
                     )
                     if nearest is None:
-                        print(consumer_location, "-> nearest is None")
+                        logger.info(f"{consumer_location}-> nearest is not found from available weights")
                     else:
-                        print(consumer_location, "-> nearest is :", nearest)
+                        logger.info(f"{consumer_location}-> nearest is {nearest}")
 
                     self.logger.isEnabledFor(logging.DEBUG) and self.logger.debug(
                         "contained: consumer %s -> nearest method container %s (ordered candidates=%s)",
@@ -3177,7 +3176,6 @@ class EdgeLCIA:
                             indices=edge_group,
                         )
 
-        print("map contained locations is over")
         self._update_unprocessed_edges()
         self.applied_strategies.append("map_contained_locations")
 

@@ -1,3 +1,26 @@
+> [!IMPORTANT]
+> **About this Repository**
+>
+> This repository is a modified and extended version of the original [`edges`](https://github.com/Laboratory-for-Energy-Systems-Analysis/edges) tool, originally developed by [Romain Sacchi](https://github.com/romainsacchi), [Alvaro Hahn Menacho](https://github.com/alvarojhahn), and [Raphaël Jolivet](https://github.com/raphaeljolivet) at the [Laboratory for Energy Systems Analysis](https://www.psi.ch/en/lea).
+> 
+> **Incremental AWARE2.0**
+> The branch *AWAREincremental* enables use of *edges* with a watershed-month-specific incremental LCIA approach. Impacts are calculated directly from the AWARE2.0 impact curve instead of using static CFs. 
+> The new functionality is showcased here: https://github.com/GeAaSe/edges_AWAREinc/blob/AWAREincremental/examples/incremental%20AWARE/Incremental_AWARE20.ipynb 
+>
+> **Key Modifications in This Fork:**
+> - Capability of inserting "fine_topology" geographies as a layer beneath the standard ecoinvent definitions. CFs for fine topologies can be matched to inventory located in fine topologies, but they are not used to reconstruct larger geographies (EU, Asia, etc.). 
+> - Integration of watershed-level AWARE CFs as fine topologies
+> - Integration of feedback between edge amounts (flow quantity) and CF
+> - Some performance improvements relevant for large CF datasets
+> - Addition of module for incremental LCIA with AWARE2.0
+> 
+>
+> **Original Work Attribution:**
+> The foundational architecture, edge-based LCIA methodology, and core functionality are derived from the original `edges` project, licensed under the MIT License. This work builds upon that foundation with enhancements tailored to incremental LCIA.
+>
+> **For the Original Tool:** Please visit the [official edges repository](https://github.com/Laboratory-for-Energy-Systems-Analysis/edges) and refer to its [official documentation](https://edges.readthedocs.io/).
+
+
 # ``edges``: Edge-based life cycle impact assessment
 
 <p align="center">

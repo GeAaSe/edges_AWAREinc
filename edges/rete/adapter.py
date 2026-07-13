@@ -103,8 +103,22 @@ def map_exchanges_clips(lcia: "EdgeLCIA"):
             "CLIPS backend does not support these matching fields yet: "
             f"{sorted(unsupported)}"
         )
-
-    rules = compile_rules(lcia.raw_cfs_data)
+    
+    # filter so CFs with fine geographies as location are only used if at least one of the two (supplier, consumer) locations 
+    # of the CF appears in the LCI. This is important to avoid explosions in memory use by RETE due to the high number of fine geographies
+    fine_to_discard = lcia.geo.fine_geographies-lcia.lci_activity_locations
+    if fine_to_discard:
+        def retain_cf(cf):
+            locations = set()
+            if cf.get("supplier", False):
+                locations.add(cf["supplier"].get("location", None))
+            if cf.get("consumer", False):
+                locations.add(cf["consumer"].get("location", None))
+            locations.discard(None)
+            return bool(locations-fine_to_discard)
+        rules = compile_rules([x for x in lcia.raw_cfs_data if retain_cf(x)])
+    else:
+        rules = compile_rules(lcia.raw_cfs_data)
     rules_sig = _rules_signature(rules)
     cache_key = _engine_cache_key(lcia, rules_sig)
     rules_by_id = {int(r["id"]): r for r in rules}
@@ -173,9 +187,7 @@ def map_exchanges_clips(lcia: "EdgeLCIA"):
             no_loc_bio_matches.add(pair)
         else:
             no_loc_tech_matches.add(pair)
-
     lcia._update_unprocessed_edges()
-
     lcia.eligible_edges_for_next_bio = no_loc_bio_matches - full_bio_matches
     lcia.eligible_edges_for_next_tech = no_loc_tech_matches - full_tech_matches
     lcia.applied_strategies.append("map_exchanges")

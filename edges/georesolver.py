@@ -98,11 +98,13 @@ class GeoResolver:
         if fine_topology is None:
             self.logger.warning("couldn't find refinement information in additional_topologies")
             self.allowed_for_aggregations = tuple([x for x in self.geo.keys()])
+            self.fine_geographies=set()
         else:
             refined_faces = self._split_faces(self.geo, fine_topology["faces_mapping"])
             self.geo.add_definitions(refined_faces, fine_topology["name"], relative=False)
             self.logger.info(f"added refined {fine_topology['name']} geometries to georesolver")
             self.contructive_geometry_namespaces.append(fine_topology["name"])
+            self.fine_geographies = set(refined_faces.keys())
             if fine_topology["hidden"]:
                 self.allowed_for_aggregations = tuple([x for x in self.geo.keys() if x[0] != fine_topology['name']])
             else:

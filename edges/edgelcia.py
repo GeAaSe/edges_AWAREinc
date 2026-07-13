@@ -515,6 +515,7 @@ class EdgeLCIA:
         self.weight_scheme: str = weight
         self.eligible_edges_for_next_bio = None
         self.eligible_edges_for_next_tech = None
+        self.lci_activity_locations = None
 
         # Accept both "parameters" and "scenarios" for flexibility
         self.parameters = parameters or {}
@@ -2128,6 +2129,7 @@ class EdgeLCIA:
             self._base_supplier_lookup_tech = None
             self._base_consumer_lookup = None
             self._flows_version = new_version
+        self.lci_activity_locations = set(bw2data.get_activity(x)["location"] for x in self.lca.activity_dict.keys())
 
     def map_exchanges(self):
         """

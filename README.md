@@ -7,6 +7,7 @@
 >
 > The branch [*AWAREincremental*](https://github.com/GeAaSe/edges_AWAREinc/tree/AWAREincremental) enables the use of `edges` with a watershed-month-specific incremental LCIA approach. Impacts are calculated directly from the AWARE2.0 impact curve instead of using static CFs. 
 > The new functionality is showcased here: https://github.com/GeAaSe/edges_AWAREinc/blob/AWAREincremental/examples/incremental%20AWARE/Incremental_AWARE20.ipynb 
+> Since this branch is a proof-of-concept, it is not available as package download. 
 >
 > **Key Modifications in This Fork:**
 > - Capability of inserting "fine_topology" geographies as a layer beneath the standard ecoinvent definitions. CFs for fine topologies can be matched to inventory located in fine topologies, but they are not used to reconstruct larger geographies (EU, Asia, etc.). 

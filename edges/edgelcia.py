@@ -2521,7 +2521,7 @@ class EdgeLCIA:
         decomposed_exclusions = self.geo.batch( # gets all locations that are inside the locations to exclude
             locations=list(raw_exclusion_locs), containing=True
         )
-        print(decomposed_exclusions)
+        # print(decomposed_exclusions)
         decomposed_exclusions = frozenset(
             (k, tuple(v)) for k, v in decomposed_exclusions.items()
         )
@@ -3139,7 +3139,7 @@ class EdgeLCIA:
                 required_supplier_fields=self.required_supplier_fields,
                 required_consumer_fields=self.required_consumer_fields,
             )
-            print("grouped_edges",grouped_edges)
+            # print("grouped_edges",grouped_edges)
 
             if len(grouped_edges) > 0:
                 for (

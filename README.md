@@ -4,7 +4,8 @@
 > This repository is a modified and extended version of the original [`edges`](https://github.com/Laboratory-for-Energy-Systems-Analysis/edges) tool, originally developed by [Romain Sacchi](https://github.com/romainsacchi), [Alvaro Hahn Menacho](https://github.com/alvarojhahn), and [Raphaël Jolivet](https://github.com/raphaeljolivet) at the [Laboratory for Energy Systems Analysis](https://www.psi.ch/en/lea).
 > 
 > **Incremental AWARE2.0**
-> The branch *AWAREincremental* enables use of *edges* with a watershed-month-specific incremental LCIA approach. Impacts are calculated directly from the AWARE2.0 impact curve instead of using static CFs. 
+>
+> The branch [*AWAREincremental*](https://github.com/GeAaSe/edges_AWAREinc/tree/AWAREincremental) enables the use of `edges` with a watershed-month-specific incremental LCIA approach. Impacts are calculated directly from the AWARE2.0 impact curve instead of using static CFs. 
 > The new functionality is showcased here: https://github.com/GeAaSe/edges_AWAREinc/blob/AWAREincremental/examples/incremental%20AWARE/Incremental_AWARE20.ipynb 
 >
 > **Key Modifications in This Fork:**
